@@ -243,7 +243,14 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxied.Scheme = p.scheme
 	proxied.Path = path.Clean(proxied.Path)
 
-	if req, err = http.NewRequest(r.Method, proxied.String(), r.Body); err != nil {
+	requestBody := bytes.Buffer{}
+	if _, err := io.Copy(&requestBody, r.Body); err != nil {
+		logrus.Errorln(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if req, err = http.NewRequest(r.Method, proxied.String(), bytes.NewReader(requestBody.Bytes())); err != nil {
 		logrus.WithError(err).Errorln("Failed creating new request.")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -358,7 +365,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Method:     r.Method,
 			Statuscode: resp.StatusCode,
 			Elapsed:    requestEnded.Seconds(),
-			Body:       query,
+			Body:       string(requestBody.Bytes()),
 		}
 
 		respStruct := &responseStruct{
